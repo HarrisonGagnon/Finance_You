@@ -25,7 +25,7 @@ private const val DividerLengthInDegrees = 1.8f
  */
 @Composable
 fun AnimatedCircle(
-    proportions: List<Float>,
+    proportions: List<Double>,
     colors: List<Color>,
     modifier: Modifier = Modifier
 ) {
@@ -76,7 +76,7 @@ fun AnimatedCircle(
         val size = Size(innerRadius * 2, innerRadius * 2)
         var startAngle = shift - 90f
         proportions.forEachIndexed { index, proportion ->
-            val sweep = proportion * angleOffset
+            val sweep = proportion.toFloat() * angleOffset
             drawArc(
                 color = colors[index],
                 startAngle = startAngle + DividerLengthInDegrees / 2,
@@ -95,7 +95,12 @@ private enum class AnimatedCircleProgress { START, END }
 /**
  * Used with accounts and bills to create the animated circle.
  */
-fun <E> List<E>.extractProportions(selector: (E) -> Float): List<Float> {
-    val total = this.sumOf { selector(it).toDouble() }
-    return this.map { (selector(it) / total).toFloat() }
+fun <E> List<E>.extractProportions(selector: (E) -> Double): List<Double> {
+    val total = this.sumOf { selector(it) }
+    return this.map { (selector(it) / total) }
+}
+
+fun mapColors(isIncome: Boolean): Color
+{
+    return if(isIncome) Color.Green else Color.Red
 }

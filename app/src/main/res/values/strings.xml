@@ -1,7 +1,8 @@
 <resources>
     <string name="app_name">FinanceYou</string>
 
-    <!-- Overview  -->
+    <!-- Statement Screen -->
+    <string name="statements_header">Statements</string>
     <string name="statement_add">App Statement</string>
     <string name="statement_name">Statement name</string>
     <string name="statement_name_error">Statement name cannot be blank</string>

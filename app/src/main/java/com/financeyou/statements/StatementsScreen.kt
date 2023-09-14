@@ -1,18 +1,16 @@
-package com.financeyou.ui
+package com.financeyou.statements
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -20,9 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -37,45 +33,39 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.financeyou.R
-import com.financeyou.data.Frequency
 import com.financeyou.ui.component.AnimatedCircle
-import com.financeyou.ui.component.StatementCard
 import com.financeyou.ui.component.extractProportions
-import com.financeyou.ui.theme.FinanceYouTheme
-import java.text.DecimalFormat
-import java.text.NumberFormat
+import com.financeyou.ui.component.mapColors
+import com.financeyou.utils.Frequency
+import com.financeyou.utils.formatCurrency
 
+
+@OptIn(ExperimentalFoundationApi::class)
 @ExperimentalMaterial3Api
 @Composable
-fun FinanceYouApp() {
-    // Screen state variables
-    var showStatementDialog by rememberSaveable { mutableStateOf(false) }
-
-    // Main scaffolding layout for the application
+fun StatementsScreen(
+    state: StatementState,
+    onEvent: (StatementEvent) -> Unit
+) {
+    // Screen scaffold
     Scaffold(
         bottomBar = {
             // TODO: Create navigation bar
         },
         floatingActionButton = {
             FloatingActionButton(onClick = {
-                showStatementDialog = true
+                onEvent(StatementEvent.ShowDialog)
             }) {
                 Icon(
                     imageVector = Icons.Filled.Add,
@@ -83,14 +73,76 @@ fun FinanceYouApp() {
             }
         }
     ) { innerPadding ->
-        FinanceYouOverview(
-            modifier = Modifier
-                .padding(innerPadding)
-        )
+
+        // Show Add Statement Dialog
         when {
-           showStatementDialog -> {
-               AddStatementDialog(onDismissClicked = { showStatementDialog = false })
-           }
+            state.isAddingStatement -> {
+                AddStatementDialog(
+                    state = state,
+                    onEvent = onEvent
+                )
+            }
+        }
+
+        // Scaffold screen main layout
+        LazyColumn(
+            contentPadding = innerPadding,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+        ) {
+            // Animated circle header item
+            item {
+                Box(modifier = Modifier)
+                {
+                AnimatedCircle(
+                    proportions = state.statements.extractProportions { it.amount },
+                    colors = state.statements.map { mapColors(it.isIncome) },
+                    Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                )
+                    Column (
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                    ) {
+                        Text(
+                            text = "Net",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                        )
+                        Text(
+                            text = formatCurrency(
+                                state.statements.sumOf
+                                { if (it.isIncome) it.amount else (it.amount * -1)}
+                            ),
+                            style = MaterialTheme.typography.headlineMedium,
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                        )
+                    }
+                }
+            }
+
+            // Statements Sticky Header
+            stickyHeader {
+                Box (
+                    modifier = Modifier
+                        .fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.statements_header),
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                    )
+                }
+            }
+
+            items(items = state.statements) { statement ->
+                StatementCard(statement)
+            }
         }
     }
 }
@@ -98,69 +150,39 @@ fun FinanceYouApp() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddStatementDialog(
-    onDismissClicked : () -> Unit
+    state: StatementState,
+    onEvent: (StatementEvent) -> Unit
 ) {
     Dialog(
-        onDismissRequest = onDismissClicked,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        onDismissRequest = { onEvent(StatementEvent.HideDialog) },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(MaterialTheme.colorScheme.background)
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState())
                     .background(MaterialTheme.colorScheme.background),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Statement variables to be saved
-                var name by rememberSaveable { mutableStateOf("") }
-                var frequency by rememberSaveable { mutableStateOf(Frequency.FrequencyEnum.MONTHLY) }
-
+                // TODO: Consider moving error checks to ViewModel
                 // Header row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Close button
-                    TextButton(
-                        onClick = onDismissClicked,
-                        modifier = Modifier
-                            .fillMaxHeight()
-                    ) {
-                        Icon(
-                            Icons.Filled.Close, "Close",
-                            tint = MaterialTheme.colorScheme.outline
-                        )
-                    }
-
                     // Add Statement header text
                     Text(
                         text = stringResource(R.string.statement_add),
                         style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier // TODO: Styling
-                    )
-
-                    // Spacer between header and save
-                    Spacer(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    )
-
-                    // Save button
-                    TextButton(
-                        onClick = onDismissClicked, // TODO: Add statement to database
                         modifier = Modifier
-                            .fillMaxHeight()
-                    ) {
-                        Text("Save", color = MaterialTheme.colorScheme.primary)
-                    }
+                            .fillMaxWidth()// TODO: Styling
+                    )
                 }
 
                 // Statement name
@@ -173,9 +195,6 @@ private fun AddStatementDialog(
                         modifier = Modifier
                             .fillMaxHeight()
                     ) {
-                        // Statement name column variables
-                        var isNameError by rememberSaveable { mutableStateOf(false) }
-
                         // Statement name text input
                         OutlinedTextField(
                             singleLine = true,
@@ -184,18 +203,22 @@ private fun AddStatementDialog(
                                     text = stringResource(R.string.statement_name)
                                 )
                             },
-                            value = name,
+                            value = state.name,
                             onValueChange = {
                                 // Error check new value
                                 if (it.isBlank()) {
-                                    isNameError = true
+//                                    isNameError = true
+                                    onEvent(StatementEvent.SetIsNameError(true))
+                                    onEvent(StatementEvent.SetName(""))
                                 } else {
-                                    isNameError = false
-                                    name = it
+                                    onEvent(StatementEvent.SetIsNameError(false))
+                                    onEvent(StatementEvent.SetName(it))
                                 }
+                                // Update savable
+//                                isSavable = checkSavable()
                             },
                             trailingIcon = {
-                                if (isNameError) {
+                                if (state.isNameError) {
                                     Icon(
                                         imageVector = Icons.Filled.Info,
                                         contentDescription = "Error",
@@ -203,13 +226,13 @@ private fun AddStatementDialog(
                                     )
                                 }
                             },
-                            isError = isNameError,
+                            isError = state.isNameError,
                             modifier = Modifier
                                 .fillMaxWidth()
                         )
 
                         // Statement name error
-                        if (isNameError) {
+                        if (state.isNameError) {
                             Text(
                                 text = stringResource(R.string.statement_name_error),
                                 color = MaterialTheme.colorScheme.error,
@@ -225,9 +248,6 @@ private fun AddStatementDialog(
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Statement Income/Expense column variables
-                    var isIncome by rememberSaveable { mutableStateOf(false) }
-
                     // Statement Income/Expense
                     Column(
                         modifier = Modifier
@@ -236,16 +256,16 @@ private fun AddStatementDialog(
                         // Statement Income/Expense text
                         Text(
                             text = stringResource(
-                                if (isIncome) R.string.statement_income
+                                if (state.isIncome) R.string.statement_income
                                 else R.string.statement_expense),
-                            color = if (isIncome) Color.Green else Color.Red,
+                            color = if (state.isIncome) Color.Green else Color.Red,
                             style = MaterialTheme.typography.bodySmall
                         )
 
                         // Statement Income/Expense switch
                         Switch(
-                            checked = isIncome,
-                            onCheckedChange = { isIncome = it },
+                            checked = state.isIncome,
+                            onCheckedChange = { onEvent(StatementEvent.SetIsIncome(it)) },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.Green,
                                 //TODO: update color checkedTrackColor =
@@ -260,10 +280,6 @@ private fun AddStatementDialog(
                         modifier = Modifier
                             .fillMaxHeight()
                     ) {
-                        // Statement amount column variables
-                        var amount by rememberSaveable { mutableStateOf("") }
-                        var amountError by rememberSaveable { mutableStateOf(StatementAmountError.NONE) }
-
                         // Statement amount text input
                         OutlinedTextField(
                             singleLine = true,
@@ -279,28 +295,23 @@ private fun AddStatementDialog(
                                 )
                             },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            value = amount,
+                            value = formatCurrency(state.amount).drop(1),
                             onValueChange = {
-                                // Error check new value
-                                if (it.isBlank()) {
-                                    amountError = StatementAmountError.BLANK
-                                } else if (it.toFloatOrNull() == null) {
-                                    amountError = StatementAmountError.NOT_NUM
+                                if (it.isBlank() || it.toFloatOrNull() == null) {
+                                    onEvent(StatementEvent.SetIsAmountError(true))
                                 }
-                                else {
+                                else
+                                {
+                                    // TODO: Fix input
                                     val clean = it.replace("""[,.]""".toRegex(), "")
                                     val parsed = clean.toDouble()
-                                    val formatted = NumberFormat.getCurrencyInstance().format((parsed / 100)).drop(1)
-                                    amountError = StatementAmountError.NONE
-                                    if (parsed == 0.00)
-                                        amountError = StatementAmountError.ZERO_VAL
-                                    amount = formatted
+                                    onEvent(StatementEvent.SetAmount(parsed/100))
                                 }
                             },
-                            colors = if (isIncome) TextFieldDefaults.outlinedTextFieldColors(textColor = Color.Green)
+                            colors = if (state.isIncome) TextFieldDefaults.outlinedTextFieldColors(textColor = Color.Green)
                             else TextFieldDefaults.outlinedTextFieldColors(textColor = Color.Red),
                             trailingIcon = {
-                                if (amountError != StatementAmountError.NONE) {
+                                if (state.isAmountError) {
                                     Icon(
                                         imageVector = Icons.Filled.Info,
                                         contentDescription = "Error",
@@ -312,14 +323,15 @@ private fun AddStatementDialog(
                                 .fillMaxWidth()
                         )
                         // Statement amount error
-                        if (amountError != StatementAmountError.NONE) {
+                        if (state.isAmountError) {
                             Text(
-                                text = when (amountError) {
-                                    StatementAmountError.NOT_NUM -> "Not a number"
-                                    StatementAmountError.BLANK -> "Cannot leave blank"
-                                    StatementAmountError.ZERO_VAL -> "Cannot leave zero"
-                                    else -> "Unknown amount error"
-                                },
+                                text = "Amount error",
+//                                when (amountError) {
+//                                    StatementAmountError.NOT_NUM -> "Not a number"
+//                                    StatementAmountError.BLANK -> "Cannot leave blank"
+//                                    StatementAmountError.ZERO_VAL -> "Cannot leave zero"
+//                                    else -> "Amount error"
+//                                },
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -333,21 +345,17 @@ private fun AddStatementDialog(
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Statement frequency row variables
-                    var freqIsExpanded by rememberSaveable { mutableStateOf(false) }
-                    var freqText by rememberSaveable { mutableStateOf(Frequency().getFrequencyMap()[Frequency.FrequencyEnum.MONTHLY]!!) }
-
                     // Statement frequency
                     ExposedDropdownMenuBox(
-                        expanded = freqIsExpanded,
-                        onExpandedChange = { freqIsExpanded = !freqIsExpanded },
+                        expanded = state.isFreqExpanded,
+                        onExpandedChange = { onEvent(StatementEvent.FrequencyExpansionChanged) },
                         modifier = Modifier // TODO: Style
-                            .fillMaxHeight()
+                            .fillMaxWidth()
                     ) {
                         // Statement frequency dropdown menu anchor
                         TextField(
                             readOnly = true,
-                            value = freqText,
+                            value = Frequency().getFrequencyMap()[state.frequency]!!,
                             onValueChange = {},
                             label = {
                                 Text(
@@ -355,14 +363,14 @@ private fun AddStatementDialog(
                                 )
                             },
                             colors = ExposedDropdownMenuDefaults.textFieldColors(),
-                            trailingIcon = {ExposedDropdownMenuDefaults.TrailingIcon(expanded = freqIsExpanded)},
+                            trailingIcon = {ExposedDropdownMenuDefaults.TrailingIcon(expanded = state.isFreqExpanded)},
                             modifier = Modifier.menuAnchor()
                         )
 
                         // Statement frequency dropdown contents
                         ExposedDropdownMenu(
-                            expanded = freqIsExpanded,
-                            onDismissRequest = { freqIsExpanded = false },
+                            expanded = state.isFreqExpanded,
+                            onDismissRequest = { onEvent(StatementEvent.CollapseFrequencies) },
                         ) {
                             // Use frequency map to populate dropdown
                             val freqMap = Frequency().getFrequencyMap()
@@ -370,9 +378,7 @@ private fun AddStatementDialog(
                                 DropdownMenuItem(
                                     text = { Text(it.value) },
                                     onClick = {
-                                        frequency = it.key
-                                        freqText = it.value
-                                        freqIsExpanded = false
+                                        onEvent(StatementEvent.SetFrequency(it.key))
                                     }
                                 )
                             }
@@ -380,83 +386,48 @@ private fun AddStatementDialog(
                     }
                 }
 
+                // TODO: add statement interest rate and compounding frequency
                 // Statement interest rate and frequency
+//                Row (
+//                    modifier = Modifier
+//                        .fillMaxWidth(),
+//                    verticalAlignment = Alignment.CenterVertically
+//                ) {
+//
+//                }
+
+                // Cancel and Save icons
                 Row (
                     modifier = Modifier
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Cancel Button
+                    TextButton(
+                        onClick = { onEvent(StatementEvent.HideDialog) },
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f)
+                    ) {
+                        Text("Cancel")
+                    }
 
+                    // Save button
+                    TextButton(
+                        onClick = {
+                            if (!state.isNameError || !state.isAmountError)
+                            {
+                                onEvent(StatementEvent.SaveStatement)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f)
+                    ) {
+                        Text("Save")
+                    }
                 }
             }
-        }
-    }
-}
-
-/**
- * Enum for statement amount error
- */
-private enum class StatementAmountError {
-    NONE,
-    BLANK,
-    NOT_NUM,
-    ZERO_VAL
-}
-
-@Preview
-@Composable
-private fun DialogPreview()
-{
-    FinanceYouTheme {
-        AddStatementDialog(onDismissClicked = {})
-    }
-}
-
-@Composable
-private fun FinanceYouOverview(
-    statements: List<String> = List (15) {"$it"},
-    modifier: Modifier = Modifier
-) {
-    // TODO: Modify params
-    LazyColumn(
-        modifier = modifier
-            .fillMaxWidth()
-    ) {
-        item {
-            Box(modifier = Modifier)
-            {
-                AnimatedCircle(
-                    proportions = statements.extractProportions { it.toFloat() },
-                    colors = List (15) { Color.Green},
-                    Modifier
-                        .height(300.dp)
-                        .fillMaxWidth()
-                )
-                Column (
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                ) {
-                    Text(
-                        text = "Net",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier
-                            .wrapContentWidth(Alignment.CenterHorizontally)
-                    )
-                    Text(
-                        text = List (15) {it.toFloat()}.sum().toString(),
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier
-                            .wrapContentWidth(Alignment.CenterHorizontally)
-                    )
-                }
-            }
-        }
-
-        items(items = statements, key = {it}) { statement ->
-            StatementCard(
-                name = statement,
-                income = statement.toInt() % 5 == 0
-            )
         }
     }
 }
