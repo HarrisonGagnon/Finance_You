@@ -8,7 +8,7 @@ sealed interface StatementEvent {
     object SaveStatement: StatementEvent
     data class SetName(val name: String): StatementEvent
     data class SetIsIncome(val isIncome: Boolean): StatementEvent
-    data class SetAmount(val amount: Double): StatementEvent
+    data class SetAmount(val amount: String): StatementEvent
     data class SetFrequency(val frequency: Frequency.Enum): StatementEvent
 
     // UI setters
@@ -16,8 +16,7 @@ sealed interface StatementEvent {
     object HideDialog: StatementEvent
     object FrequencyExpansionChanged: StatementEvent
     object CollapseFrequencies: StatementEvent
-    data class SetIsNameError(val isNameError: Boolean): StatementEvent
-    data class SetIsAmountError(val isAmountError: Boolean): StatementEvent
     data class SortStatements(val sortType: StatementSortType): StatementEvent
+    data class UpdateStatement(val statement: StatementData): StatementEvent
     data class DeleteStatement(val statement: StatementData): StatementEvent
 }

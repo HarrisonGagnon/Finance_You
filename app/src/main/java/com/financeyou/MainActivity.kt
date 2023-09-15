@@ -11,11 +11,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
 import com.financeyou.data.FinanceYouDatabase
-import com.financeyou.data.StatementData
+import com.financeyou.data.StatementRepository
 import com.financeyou.statements.StatementsScreen
 import com.financeyou.statements.StatementsViewModel
 import com.financeyou.ui.theme.FinanceYouTheme
-import com.financeyou.utils.Frequency
 
 class MainActivity : ComponentActivity() {
 
@@ -33,7 +32,7 @@ class MainActivity : ComponentActivity() {
         factoryProducer = {
             object: ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return StatementsViewModel(database.statementDAO) as T
+                    return StatementsViewModel(StatementRepository(database.statementDAO)) as T
                 }
             }
         }
