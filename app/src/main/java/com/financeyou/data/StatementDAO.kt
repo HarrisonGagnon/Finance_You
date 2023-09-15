@@ -1,6 +1,5 @@
 package com.financeyou.data
 
-import androidx.lifecycle.LiveData
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Query
@@ -11,12 +10,6 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface StatementDAO {
     /**
-     * @brief Gets all StatementData from the database
-     */
-    @Query("SELECT * FROM statement_table")
-    fun getAllStatements(): Flow<List<StatementData>>
-
-    /**
      * @brief Insert StatementData into Database
      */
     @Upsert
@@ -25,14 +18,20 @@ interface StatementDAO {
     /**
      * @brief Updates StatementData in the database with a matching primary key
      */
-//    @Update
-//    suspend fun updateStatement(statementData: StatementData)
+    @Update
+    suspend fun updateStatement(statementData: StatementData)
 
     /**
      * @brief Delete StatementData from Database
      */
-//    @Delete
-//    suspend fun deleteStatement(statementDataName: String)
+    @Delete
+    suspend fun deleteStatement(statementData: StatementData)
+
+    /**
+     * @brief Gets all StatementData from the database
+     */
+    @Query("SELECT * FROM statement_table")
+    fun getAllStatements(): Flow<List<StatementData>>
 
     /**
      * @brief Get StatementData from Database ordered by descending amount

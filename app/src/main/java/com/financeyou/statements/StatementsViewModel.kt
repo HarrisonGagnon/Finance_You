@@ -2,9 +2,10 @@ package com.financeyou.statements
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.financeyou.data.StatementDAO
 import com.financeyou.data.StatementData
+import com.financeyou.data.StatementRepository
 import com.financeyou.utils.Frequency
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -13,25 +14,23 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.text.NumberFormat
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class StatementsViewModel(
-    private val statementDao: StatementDAO
+    private val statementRepository: StatementRepository
 ): ViewModel() {
+
 
     // Private Flows
     private val _sortType = MutableStateFlow(StatementSortType.MOST_RECENT)
-    private val _statements = _sortType
-        .flatMapLatest {
-            when (it) {
-                StatementSortType.MOST_RECENT -> statementDao.getAllStatements()
-                StatementSortType.AMOUNT_ASC -> statementDao.getStatementsOrderedByAmountAsc()
-                StatementSortType.AMOUNT_DESC -> statementDao.getStatementsOrderedByAmountDesc()
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
     private val _state = MutableStateFlow(StatementState())
+    private var _statements = _sortType.flatMapLatest {
+            when (it) {
+                StatementSortType.MOST_RECENT -> statementRepository.allStatementsRecent()
+                StatementSortType.AMOUNT_ASC -> statementRepository.allStatementsAmountAsc()
+                StatementSortType.AMOUNT_DESC -> statementRepository.allStatementsAmountDesc()
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
     // Combine private Flows into public State
     val state = combine(_state, _statements, _sortType) { state, statements, sortType ->
@@ -49,8 +48,11 @@ class StatementsViewModel(
             // Statement parameter setters
             is StatementEvent.SetName -> {
                 // Update Statement name
-                _state.update {
-                    it.copy(name = event.name)
+                errorCheckName(event.name)
+                if (!state.value.isNameError) {
+                    _state.update {
+                        it.copy(name = event.name)
+                    }
                 }
             }
             is StatementEvent.SetIsIncome -> {
@@ -61,12 +63,18 @@ class StatementsViewModel(
             }
             is StatementEvent.SetAmount -> {
                 // Update Statement amount
-                _state.update {
-                    it.copy(
-                        amount = event.amount,
-                        isAmountError = false
-                    )
+                errorCheckAmount(event.amount)
+                if (!state.value.isAmountError) {
+                    val clean = event.amount.replace("""[,.]""".toRegex(), "")
+                    val parsed = clean.toDouble()
+                    _state.update {
+                        it.copy(
+                            amount = parsed/100,
+                            isAmountError = false
+                        )
+                    }
                 }
+
             }
             is StatementEvent.SetFrequency -> {
                 // Update Statement frequency
@@ -77,13 +85,15 @@ class StatementsViewModel(
                     )
                 }
             }
+
+            // Statement modifiers
             is StatementEvent.SaveStatement -> {
-                // Error checking
                 // TODO: add error checking
+                errorCheckName(state.value.name)
 
                 // Add Statement to database
-                viewModelScope.launch {
-                    statementDao.upsertStatement(StatementData(
+                viewModelScope.launch(Dispatchers.IO) {
+                    statementRepository.upsert(StatementData(
                         name = state.value.name,
                         isIncome = state.value.isIncome,
                         amount = state.value.amount,
@@ -91,27 +101,31 @@ class StatementsViewModel(
                     ))
                 }
 
-                // Reset state
+                resetStatementState()
+            }
+            is StatementEvent.UpdateStatement -> {
+                // Set state to statement to update and show dialog
                 _state.update {
                     it.copy(
-                        // Reset Statement parameters
-                        name = "",
-                        isIncome = false,
-                        amount = 0.00,
-                        frequency = Frequency.Enum.MONTHLY,
-
-                        // Reset UI state variables
-                        isAddingStatement = false,
-                        isFreqExpanded = false,
-                        isAmountError = true,
-                        isNameError = true
+                        name = event.statement.name,
+                        isIncome = event.statement.isIncome,
+                        amount = event.statement.amount,
+                        frequency = event.statement.frequency,
+                        isAddingStatement = true
                     )
+                }
+            }
+            is StatementEvent.DeleteStatement -> {
+                // Delete statement
+                viewModelScope.launch(Dispatchers.IO) {
+                    statementRepository.delete(event.statement)
                 }
             }
 
             // UI setters
             StatementEvent.ShowDialog -> {
-                // Update isAddingStatement
+                // Update isAddingStatement and reset state
+                resetStatementState()
                 _state.update {
                     it.copy(isAddingStatement = true)
                 }
@@ -134,30 +148,50 @@ class StatementsViewModel(
                     it.copy(isFreqExpanded = false)
                 }
             }
-            is StatementEvent.SetIsNameError -> {
-               // Update isNameError
-                _state.update {
-                    it.copy(isNameError = event.isNameError)
-                }
-            }
-            is StatementEvent.SetIsAmountError -> {
-                // Update isAmountError
-                _state.update {
-                    it.copy(isAmountError = event.isAmountError)
-                }
-            }
             is StatementEvent.SortStatements -> {
                 _sortType.value = event.sortType
-            }
-            is StatementEvent.DeleteStatement -> {
-                // Delete statement
-//                viewModelScope.launch {
-//                    statementDao.deleteStatement()
-//                }
             }
         }
     }
 
+    private fun errorCheckName(name: String) {
+        if (name.isBlank()) {
+            _state.update {
+                it.copy(isNameError = true)
+            }
+        }
+    }
 
+    private fun errorCheckAmount(amount: String) {
+        if (amount.isBlank() || amount.toFloatOrNull() == null) {
+            _state.update {
+                it.copy(
+                    isAmountError = true
+                )
+            }
+        }
+        else
+        {
+            // TODO: Fix input
+        }
+    }
 
+    private fun resetStatementState() {
+        // Reset state
+        _state.update {
+            it.copy(
+                // Reset Statement parameters
+                name = "",
+                isIncome = false,
+                amount = 0.00,
+                frequency = Frequency.Enum.MONTHLY,
+
+                // Reset UI state variables
+                isAddingStatement = false,
+                isFreqExpanded = false,
+                isAmountError = false,
+                isNameError = false
+            )
+        }
+    }
 }

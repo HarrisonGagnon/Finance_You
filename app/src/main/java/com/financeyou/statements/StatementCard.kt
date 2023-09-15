@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,9 +26,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.financeyou.data.StatementData
 import com.financeyou.utils.Frequency
+import com.financeyou.utils.formatCurrency
 
 @Composable
 fun StatementCard(
+    onEvent: ((StatementEvent) -> Unit?)?,
     statement: StatementData,
 ) {
    Card(
@@ -68,8 +70,8 @@ fun StatementCard(
                .fillMaxHeight())
 
            Text(
-               text = String.format("$%.2f", statement.amount),
-               style = MaterialTheme.typography.labelMedium,
+               text = formatCurrency(statement.amount),
+               style = MaterialTheme.typography.bodyMedium,
                color = if (statement.isIncome) Color.Green else Color.Red,
                textAlign = TextAlign.Center,
                modifier = Modifier
@@ -77,16 +79,30 @@ fun StatementCard(
            )
 
            // TODO: delete statement and confirm with dialog
-//           IconButton(
-//               onClick = { /*TODO*/ },
-//               modifier = Modifier
-//                   .fillMaxHeight()
-//           ) {
-//               Icon(
-//                   imageVector = Icons.Default.Delete,
-//                   contentDescription = "More statement info"
-//               )
-//           }
+           IconButton(
+               onClick = {
+                   onEvent!!(StatementEvent.DeleteStatement(statement))
+               },
+               modifier = Modifier
+                   .fillMaxHeight()
+           ) {
+               Icon(
+                   imageVector = Icons.Default.Delete,
+                   contentDescription = "More statement info"
+               )
+           }
+
+           IconButton(
+               onClick = {
+                   onEvent!!(StatementEvent.UpdateStatement(statement))
+               }
+           ) {
+               Icon(
+                   imageVector = Icons.Default.Edit,
+                   contentDescription = "Edit statement"
+               )
+
+           }
        }
    }
 }
@@ -95,6 +111,7 @@ fun StatementCard(
 @Composable
 fun PrevStatementCard() {
     StatementCard(
+        onEvent = null,
         StatementData(
         "Test Statement",
         false,
